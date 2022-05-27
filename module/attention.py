@@ -129,8 +129,7 @@ class PositionalEncoding(nn.Module):
             positions = torch.arange(inputs.size(1), device=inputs.device, dtype=inputs.dtype).expand(inputs.size(0), inputs.size(1)).contiguous() + 1
             pos_mask = inputs.eq(self.padding_idx)
             positions.masked_fill(pos_mask, 0)
-            print(pos_info.shape)
-            pos_info = torch.embedding(pos_info, positions)   # [B, T] -> [B, T, D]
+            pos_info = torch.embedding(positions, pos_info)   # [B, T] -> [B, T, D]
             assert pos_info.shape == x.shape, \
                 "Dimension of positional embedding tensor should be equal to the word embedding tensor."
         #
@@ -145,6 +144,8 @@ class PositionalEncoding(nn.Module):
         return pos / (10000 ** (2 * dim / self.hidden_size))
 
     def _get_sinusoid_table(self, n_seq: int):
+        if self.is_pos_embed:
+            n_seq = n_seq + 1
         sinusoid_table = torch.Tensor([[self._get_angle(pos, i_hidden) for i_hidden in range(self.hidden_size)] for pos in range(n_seq)])
         sinusoid_table[:, 0::2] = torch.sin(sinusoid_table[:, 0::2])
         sinusoid_table[:, 1::2] = torch.cos(sinusoid_table[:, 1::2])
