@@ -1,5 +1,5 @@
 import torch
-from src import *
+from module import *
 
 
 def test_dot_product():
