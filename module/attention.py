@@ -126,10 +126,11 @@ class PositionalEncoding(nn.Module):
             #
             #   Dimension of positional embedded tensor should be equal to the word embedded tensor.
             #
-            positions = torch.arange(inputs.size(1), dtype=inputs.dtype).expand(inputs.size(0), inputs.size(1)).contiguous() + 1
+            positions = torch.arange(inputs.size(1), device=inputs.device, dtype=inputs.dtype).expand(inputs.size(0), inputs.size(1)).contiguous() + 1
             pos_mask = inputs.eq(self.padding_idx)
-            positions = positions.masked_fill(pos_mask, 0)
-            pos_info = F.embedding(positions, pos_info, padding_idx=self.padding_idx)   # [B, T, D] -> [B, T, D]
+            positions.masked_fill(pos_mask, 0)
+            print(pos_info.shape)
+            pos_info = torch.embedding(pos_info, positions)   # [B, T] -> [B, T, D]
             assert pos_info.shape == x.shape, \
                 "Dimension of positional embedding tensor should be equal to the word embedding tensor."
         #
@@ -176,3 +177,9 @@ class MultiHeadAttention(nn.Module):
         :param x:
         :return:
         """
+
+
+if __name__ == "__main__":
+    encoding = PositionalEncoding(501, hidden_size=128, padding_idx=0, is_pos_embed=True)
+    x = torch.randint(1, 500, (1, 100))
+    print(encoding(x).shape)
