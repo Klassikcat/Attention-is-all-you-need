@@ -1,8 +1,54 @@
+from typing import Tuple, List
+
 import torch
 from torch import nn
-from .attention import MultiHeadAttention
+from .attention import MultiHeadAttention, encoder_attn_mask, decoder_attn_mask
 from .feed_forward import FeedForward
 from .positional_encoding import PositionalEncoding
+
+
+class EncoderModule(nn.Module):
+    def __init__(
+            self,
+            hidden_dim: int,
+            num_heads: int,
+            dim_head: int,
+            feed_forward_expansion_factor: int,
+            feed_forward_dropout: float = 0.5,
+    ):
+        """
+        Initializer of Encoder Module.
+        """
+        super(EncoderModule, self).__init__()
+        self.attention = MultiHeadAttention(hidden_dim, num_heads, dim_head)
+        self.feed_forward = FeedForward(hidden_dim, feed_forward_expansion_factor, feed_forward_dropout)
+        self.layernorm1 = nn.LayerNorm(hidden_dim)
+        self.layernorm2 = nn.LayerNorm(hidden_dim)
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward propagation of Encoder Module.
+
+        Args:
+            :param hidden_dim: hidden dimension of Encoder Module.
+            :param num_heads: number of heads of MultiHeadAttention.
+            :param dim_head: dimension of head of MultiHeadAttention.
+            :param feed_forward_expansion_factor: expansion factor of FeedForward.
+            :param feed_forward_dropout: dropout rate of FeedForward.
+
+        Params:
+            Given Batch size = B, Sequence Length = T
+            :param x: input tensor of Encoder Module shapes [B, H, T].
+
+        Returns:
+            Given Batch size = B, Sequence Length = T, Hidden Dimension = H
+            :return: output tensor of Encoder Module shapes [B, H, T]
+        """
+        attn_output, attn_prob = self.attention(x, x, x, mask)
+        attn_output = self.layernorm1(attn_output + x)
+        ffn_output = self.feed_forward(attn_output)
+        layernorm_output = self.layernorm2(attn_output + ffn_output)
+        return layernorm_output, attn_prob
 
 
 class Encoder(nn.Module):
@@ -18,25 +64,18 @@ class Encoder(nn.Module):
             feed_forward_dropout: float = 0.5,
             is_positional_embedding: bool = True,
     ):
-        """
-        Initializer of Encoder Module.
-        """
         super(Encoder, self).__init__()
         self.positional_encoding = PositionalEncoding(
             input_dim, hidden_size=hidden_dim, is_pos_embed=is_positional_embedding, padding_idx=pad_idx
         )
-        self.layers = nn.ModuleList(
-            [
-                MultiHeadAttention(hidden_dim, num_heads, dim_head) for _ in range(n_layers)
-            ]
-        )
-        self.feed_forward = FeedForward(hidden_dim, feed_forward_expansion_factor, feed_forward_dropout)
-        self.layernorm = nn.LayerNorm(hidden_dim)
+        self.modules = nn.ModuleList([
+            EncoderModule(
+                hidden_dim, num_heads, dim_head, feed_forward_expansion_factor, feed_forward_dropout
+            ) for _ in range(n_layers)
+        ])
+        self.pad_idx
 
-    def _add_norm(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return self.layernorm(torch.add(x, y))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List]:
         """
         Forward propagation of Encoder Module.
 
@@ -60,10 +99,12 @@ class Encoder(nn.Module):
             :return: output tensor of Encoder Module shapes [B, H, T]
         """
         x = self.positional_encoding(x)
-        for layer in self.layers:
-            x = layer(x)
-            x = self.feed_forward(x)
-        return x
+        attn_mask = encoder_attn_mask(x, x, self.pad_idx)
+        attn_probs = list()
+        for module in self.modules:
+            module_output, attn_prob = module(x, x, x, attn_mask)
+            attn_probs.append(attn_prob)
+        return module_output, attn_probs
 
 
 class Decoder(nn.Module):
