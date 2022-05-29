@@ -59,17 +59,44 @@ def scaled_dot_product_attention(
     return attention_score, regularlized_sim
 
 
+def encoder_attn_mask(query: torch.Tensor, key: torch.Tensor, pad_idx: torch.Tensor):
+    """
+    Masking encoder padding positions.
+
+    :param query: torch.Tensor, query matrix shapes [B, 1, Q] (hidden states, decoder output, etc...]
+    :param key: torch.Tensor, key matrix shapes [T, B, K] (encoder outputs)
+    :param pad_idx: torch.Tensor, pad index
+    :return: torch.Tensor, mask location shapes.
+    """
+    batch_size, query_len = key.size()[:1]
+    _, key_len = key.size()[:1]
+    pad_attn_mask = key.data.eq(pad_idx)
+    return pad_attn_mask.unsqueeze(1).expand(batch_size, query_len, key_len)
+
+
+def decoder_attn_mask(seq: torch.Tensor):
+    """
+    Masking decoder padding positions.
+
+    :param seq: torch.Tensor, sequence matrix shapes [B, 1, Q] (hidden states, decoder output, etc...]
+    :return: torch.Tensor, mask location shapes.
+    """
+    # Create mask
+    subsequent_mask = torch.ones_like(seq).unsqueeze(-1).expand(seq.size(0), seq.size(1), seq.size(1))
+    subsequent_mask = subsequent_mask.triu(diagonal=1)  # upper triangular part of a matrix(2-D)
+    return subsequent_mask
+
+
 class MultiHeadAttention(nn.Module):
     """
     initializer of Multi-Head Attention
     """
 
-    def __init__(self, hidden_dim: int, num_heads: int, dim_head: int, dropout_p: float = 0.1):
+    def __init__(self, hidden_dim: int, num_heads: int, dim_head: int):
         super(MultiHeadAttention, self).__init__()
         self.query_proj = nn.Linear(hidden_dim, dim_head * num_heads)
         self.key_proj = nn.Linear(hidden_dim, dim_head * num_heads)
         self.value_proj = nn.Linear(hidden_dim, dim_head * num_heads)
-        self.dropout = nn.Dropout(dropout_p)
         self.dense = nn.Linear(dim_head * num_heads, hidden_dim)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor]):

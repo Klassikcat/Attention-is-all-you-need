@@ -4,9 +4,9 @@ import torch.nn.functional as F
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, vocab_size: int, hidden_size: int, padding_idx: int = 0, is_pos_embed: bool = False):
+    def __init__(self, input_dim: int, hidden_size: int, padding_idx: int = 0, is_pos_embed: bool = False):
         super(PositionalEncoding, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, hidden_size, padding_idx)
+        self.embedding = nn.Embedding(input_dim, hidden_size, padding_idx)
         self.hidden_size = hidden_size
         self.padding_idx = padding_idx
         self.is_pos_embed = is_pos_embed
