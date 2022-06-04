@@ -239,8 +239,8 @@ class Decoder(nn.Module):
         dec_enc_attn_mask = encoder_attn_mask(decoder_inputs, encoder_inputs, self.pad_idx)
         attn_probs, enc_dec_attn_probs = list(), list()
         for layer in self.layers:
-            decoder_output, attention_prob, enc_dec_attn_probs = layer(
+            decoder_output, attention_prob, enc_dec_attn_prob = layer(
                 decoder_output, encoder_outputs, dec_self_attn_mask, dec_enc_attn_mask
             )
-            attn_probs.append(attention_prob), enc_dec_attn_probs.append(enc_dec_attn_probs)
+            attn_probs.append(attention_prob), enc_dec_attn_probs.append(enc_dec_attn_prob)
         return decoder_output, attn_probs, enc_dec_attn_probs

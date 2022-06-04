@@ -1,4 +1,5 @@
 import torch
+import os
 from module import *
 
 
@@ -6,7 +7,7 @@ def test_dot_product():
     query = torch.rand(3, 3, 3)
     key = torch.rand(3, 3, 3)
     value = torch.rand(3, 3, 3)
-    mask = torch.rand(3, 3, 3)
+    mask = torch.randint(0, 1, (3, 3))
     return scaled_dot_product_attention(query, key, value, mask, dropout_p=.1)
 
 
@@ -58,14 +59,34 @@ def test_multi_head_attention():
 
 
 def main():
-    """
-    assert test_dot_product()
-    assert test_positional_encoding()
-    assert test_multi_head_attention()
-    assert test_decoder_module()
-    """
-    assert test_encoder_module()
-    assert test_encoder_module()
+    try:
+        if torch.cuda.is_available():
+            print("Testing on CUDA environment\n"
+                  "CUDA device count: {}\n"
+                  "CUDA device name: {}\n"
+                  "CUDA device version: {}\n"
+                  "CUDA device capability: {}\n"
+                  "Pytorch version: {}\n"
+                  "Operating system: {}\n"
+                  ).format(torch.cuda.device_count(),
+                           torch.cuda.get_device_name(0),
+                           torch.version.cuda,
+                           torch.cuda.get_device_capability(0),
+                           torch.__version__,
+                           os.name)
+        elif not torch.cuda.is_available():
+            print(f"Testing on CPU environment.\n"
+                  f"Environment information: pytorch {torch.__version__}, Operating System: {os.name}")
+        test_dot_product()
+        test_positional_encoding()
+        test_multi_head_attention()
+        test_decoder_module()
+        test_encoder_module()
+        test_decoder_module()
+        print("Test Passed! Good job!")
+    except Exception as e:
+        print("Test Failed! Check your code!")
+        print(e)
 
 
 if __name__ == '__main__':
