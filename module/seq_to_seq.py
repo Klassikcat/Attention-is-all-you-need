@@ -68,12 +68,12 @@ class Encoder(nn.Module):
         self.positional_encoding = PositionalEncoding(
             input_dim, hidden_size=hidden_dim, is_pos_embed=is_positional_embedding, padding_idx=pad_idx
         )
-        self.modules = nn.ModuleList([
+        self.attn_modules = nn.ModuleList([
             EncoderModule(
                 hidden_dim, num_heads, dim_head, feed_forward_expansion_factor, feed_forward_dropout
             ) for _ in range(n_layers)
         ])
-        self.pad_idx
+        self.pad_idx = pad_idx
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List]:
         """
@@ -98,11 +98,11 @@ class Encoder(nn.Module):
             Given Batch size = B, Sequence Length = T, Hidden Dimension = H
             :return: output tensor of Encoder Module shapes [B, H, T]
         """
-        x = self.positional_encoding(x)
+        encoder_output = self.positional_encoding(x)
         attn_mask = encoder_attn_mask(x, x, self.pad_idx)
         attn_probs = list()
-        for module in self.modules:
-            module_output, attn_prob = module(x, x, x, attn_mask)
+        for module in self.attn_modules:
+            module_output, attn_prob = module(encoder_output, attn_mask)
             attn_probs.append(attn_prob)
         return module_output, attn_probs
 
@@ -127,7 +127,7 @@ class DecoderModule(nn.Module):
         self.layernorm2 = nn.LayerNorm(hidden_dim)
         self.layernorm3 = nn.LayerNorm(hidden_dim)
 
-    def forward(self, inputs: torch.Tensor, encoder_inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, inputs: torch.Tensor, encoder_inputs: torch.Tensor, decoder_mask: torch.Tensor, enc_dec_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Forward propagation of Decoder Module.
 
@@ -151,7 +151,7 @@ class DecoderModule(nn.Module):
         #
         # [B, T, H] -> [B, T, H], [B, n_heads, T, T]
         #
-        attention_output, attn_probs = self.attention(inputs, inputs, inputs)
+        attention_output, attn_probs = self.attention(inputs, inputs, inputs, decoder_mask)
         #
         #   [B, T, H] -> [B, T, H]
         #
@@ -159,7 +159,7 @@ class DecoderModule(nn.Module):
         #
         #   [B, T, H], [B, T, H] -> [B, T, H], [B, n_heads, T, T]
         #
-        enc_dec_output, enc_dec_attn_probs = self.encoder_attention(layernorm_output, encoder_inputs, encoder_inputs)
+        enc_dec_output, enc_dec_attn_probs = self.encoder_attention(layernorm_output, encoder_inputs, encoder_inputs, enc_dec_mask)
         #
         #   [B, T, H] -> [B, T, H]
         #
@@ -205,6 +205,7 @@ class Decoder(nn.Module):
                 ) for _ in range(n_layers)
             ]
         )
+        self.pad_idx = pad_idx
 
     def forward(self, decoder_inputs: torch.Tensor, encoder_inputs: torch.Tensor, encoder_outputs: torch.Tensor) -> Tuple[torch.Tensor, List, List]:
         """
@@ -231,7 +232,15 @@ class Decoder(nn.Module):
             :return: output tensor of Encoder Module shapes [B, H, T]
         """
         decoder_output = self.positional_encoding(decoder_inputs)
-
-
+        decoder_pad_masks = encoder_attn_mask(decoder_inputs, decoder_inputs, self.pad_idx)
+        decoder_attn_masks = decoder_attn_mask(decoder_inputs)
+        dec_self_attn_mask = torch.gt((decoder_pad_masks + decoder_attn_masks), 0)
+        # (bs, n_dec_seq, n_enc_seq)
+        dec_enc_attn_mask = encoder_attn_mask(decoder_inputs, encoder_inputs, self.pad_idx)
+        attn_probs, enc_dec_attn_probs = list(), list()
         for layer in self.layers:
-            x = layer(x, x, encoder_outputs)
+            decoder_output, attention_prob, enc_dec_attn_probs = layer(
+                decoder_output, encoder_outputs, dec_self_attn_mask, dec_enc_attn_mask
+            )
+            attn_probs.append(attention_prob), enc_dec_attn_probs.append(enc_dec_attn_probs)
+        return decoder_output, attn_probs, enc_dec_attn_probs

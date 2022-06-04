@@ -37,7 +37,7 @@ def scaled_dot_product_attention(
     #   Inner product between query and key matrix will give the similarity score matrix
     #   between all elements of query and key matrix.
 
-    sim = torch.matmul(query, torch.transpose(key, 1, 2))  # [B, K, T, H] * [B, K, T, H] = [B, K, T, H]
+    sim = torch.matmul(query, torch.transpose(key, -1, -2))  # [B, K, T, H] * [B, K, T, H] = [B, K, T, H]
 
     #   Next, Normalize all similarity score by dividing square root of the dimension.
     #   Then, regularize normalized score by applying softmax function.
@@ -45,7 +45,7 @@ def scaled_dot_product_attention(
 
     scale = 1 / np.sqrt(key.shape[1])
     normalized_sim = sim * scale  # [B, 1, T]
-    if mask:
+    if mask is not None:
         normalized_sim = normalized_sim.masked_fill_(mask, -1e-9)  # Mask Added
     regularlized_sim = torch.softmax(normalized_sim, dim=-1)  # Regularized
 
@@ -59,7 +59,7 @@ def scaled_dot_product_attention(
     return attention_score, regularlized_sim
 
 
-def encoder_attn_mask(query: torch.Tensor, key: torch.Tensor, pad_idx: torch.Tensor):
+def encoder_attn_mask(query: torch.Tensor, key: torch.Tensor, pad_idx: int):
     """
     Masking encoder padding positions.
 
@@ -68,8 +68,8 @@ def encoder_attn_mask(query: torch.Tensor, key: torch.Tensor, pad_idx: torch.Ten
     :param pad_idx: torch.Tensor, pad index
     :return: torch.Tensor, mask location shapes.
     """
-    batch_size, query_len = key.size()[:1]
-    _, key_len = key.size()[:1]
+    batch_size, query_len = query.size()
+    _, key_len = key.size()
     pad_attn_mask = key.data.eq(pad_idx)
     return pad_attn_mask.unsqueeze(1).expand(batch_size, query_len, key_len)
 
@@ -98,8 +98,10 @@ class MultiHeadAttention(nn.Module):
         self.key_proj = nn.Linear(hidden_dim, dim_head * num_heads)
         self.value_proj = nn.Linear(hidden_dim, dim_head * num_heads)
         self.dense = nn.Linear(dim_head * num_heads, hidden_dim)
+        self.num_heads = num_heads
+        self.dim_head = dim_head
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor]):
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: Optional[torch.Tensor] = None):
         """
         Forward propagation of Multi-Head Attention.
 
@@ -123,9 +125,9 @@ class MultiHeadAttention(nn.Module):
 
         # get batch_size, sequence length, hidden dim.
 
-        batch_size = x.shape[0]
-        seq_len = x.shape[1]
-        hidden_dim = x.shape[2]
+        batch_size = query.shape[0]
+        seq_len = query.shape[1]
+        hidden_dim = query.shape[2]
 
         #
         # First, Split x value into query, key, and value, then reshape them into [B, H, T, D * H]
@@ -134,9 +136,9 @@ class MultiHeadAttention(nn.Module):
         # Step 1. split x into query, key and value.
         #
 
-        query = self.query_proj(x)  # [B, T, D] -> [B, T, K * H]
-        key = self.key_proj(x)  # [B, T, D] -> [B, T, K * H]
-        value = self.value_proj(x)  # [B, T, D] -> [B, T, K * H]
+        query = self.query_proj(query)  # [B, T, D] -> [B, T, K * H]
+        key = self.key_proj(key)  # [B, T, D] -> [B, T, K * H]
+        value = self.value_proj(value)  # [B, T, D] -> [B, T, K * H]
 
         #
         # Step 2. split query, key and value into multiple heads.
@@ -155,7 +157,7 @@ class MultiHeadAttention(nn.Module):
         value = value.transpose(1, 2)  # [B, T, K, H] -> [B, K, H, T]
 
         # if masks exists, perform same steps to masks.
-        if mask:
+        if mask is not None:
             mask.unsqueeze(1).repeat(1, self.num_heads, 1, 1)
 
         #
@@ -171,6 +173,6 @@ class MultiHeadAttention(nn.Module):
         #   2. [B, H, K, T] -> [B, T, K * H]
         #
 
-        context = context.transpose(1, 2).contiguous().view(batch_size, -1, self.n_head * self.d_head)
+        context = context.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.dim_head)
         context = self.dense(context)   # [B, T, K * H] -> [B, T, D]
         return context, attention_score
