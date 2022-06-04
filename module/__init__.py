@@ -6,3 +6,4 @@ from .lr_scheduler import *
 from .optim import *
 from .positional_encoding import *
 from .seq_to_seq import *
+from .dataclass import *
