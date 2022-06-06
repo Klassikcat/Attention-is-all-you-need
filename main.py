@@ -1,5 +1,6 @@
 import torch
 import argparse
+from typing import Dict
 from omegaconf import DictConfig
 import pytorch_lightning as pl
 from module import Encoder, Decoder
@@ -39,6 +40,10 @@ class TransformerModel(pl.LightningModule):
         encoder_output, encoder_attn_probs = self.encoder(encoder_input)
         target_seq = torch.LongTensor([self.sos_id])
         decoder_output, decoder_attn_probs, enc_dec_attn_probs = self.decoder(encoder_output, encoder_attn_probs)
+
+    def configure_optimizers(self) -> Dict[str: torch.optim.Optimizer, str: torch.optim.lr_scheduler]:
+        self.optimizers = torch.optim.Adam(self.parameters(), lr=self.config.learning_rate)
+        self.lr_scheduler = None
 
 
 def train(args):

@@ -24,12 +24,6 @@ class TransformerConfiguration(Dataclass):
             "description": "The hidden dimension of the transformer."
         },
     )
-    num_layers: int = field(
-        metadata={
-            "type": int,
-            "description": "The number of layers of the transformer."
-        },
-    )
     num_heads: int = field(
         metadata={
             "type": int,
