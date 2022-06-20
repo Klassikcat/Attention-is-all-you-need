@@ -1,4 +1,5 @@
 from typing import Tuple, List
+from omegaconf import DictConfig
 
 import torch
 from torch import nn
@@ -244,3 +245,43 @@ class Decoder(nn.Module):
             )
             attn_probs.append(attention_prob), enc_dec_attn_probs.append(enc_dec_attn_prob)
         return decoder_output, attn_probs, enc_dec_attn_probs
+
+
+class Seq2SeqTransformer(nn.Module):
+    def __init__(self, config: DictConfig):
+        super(Seq2SeqTransformer, self).__init__()
+        self.encoder = Encoder(
+            config.input_dim,
+            config.hidden_dim,
+            config.num_heads,
+            config.dim_head,
+            config.encoder_feed_forward_expansion_factor,
+            config.encoder_n_layers,
+            config.pad_idx,
+            config.feed_forward_dropout,
+            config.is_positional_embedding,
+
+        )
+        self.decoder = Decoder(
+            config.input_dim,
+            config.hidden_dim,
+            config.num_heads,
+            config.dim_head,
+            config.decoder_feed_forward_expansion_factor,
+            config.decoder_n_layers,
+            config.pad_idx,
+            config.feed_forward_dropout,
+            config.is_positional_embedding,
+        )
+
+    def forward(self, encoder_inputs: torch.Tensor, decoder_inputs: torch.Tensor) -> Tuple[torch.Tensor, list, list, list]:
+        encoder_output, enc_attn_probs = self.encoder(encoder_inputs)
+        decoder_outputs, dec_attn_probs, enc_dec_attn_probs = self.decoder(decoder_inputs, encoder_inputs, encoder_output)
+        return decoder_outputs, enc_attn_probs, dec_attn_probs, enc_dec_attn_probs
+
+    def encode(self, input_x: torch.Tensor, input_mask: torch.Tensor):
+        return self.encoder(input_x, input_mask)
+
+    def decode(self, input_y: torch.Tensor, memory: torch.Tensor, input_mask: torch.Tensor):
+        return self.decoder(input_y, memory, input_mask)
+
